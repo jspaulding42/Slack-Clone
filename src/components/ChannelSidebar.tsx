@@ -5,6 +5,10 @@ type ChannelSidebarProps = {
   selectedChannelId: string | null
   onSelectChannel: (channelId: string) => void
   onCreateChannel: () => void
+  onSwitchOrganization: () => void
+  onInvite: () => void
+  onLogout: () => void
+  organizationName?: string
   isLoading?: boolean
 }
 
@@ -13,18 +17,40 @@ export const ChannelSidebar = ({
   selectedChannelId,
   onSelectChannel,
   onCreateChannel,
+  onSwitchOrganization,
+  onInvite,
+  onLogout,
+  organizationName,
   isLoading = false
 }: ChannelSidebarProps) => (
   <aside className="sidebar">
+    <div className="sidebar__org-card">
+      <div>
+        <p>Workspace</p>
+        <strong>{organizationName ?? 'No organization selected'}</strong>
+      </div>
+      <div className="sidebar__org-actions">
+        <button className="ghost-btn" type="button" onClick={onSwitchOrganization}>
+          Switch
+        </button>
+        <button className="ghost-btn" type="button" onClick={onInvite} disabled={!organizationName}>
+          Invite
+        </button>
+        <button className="ghost-btn" type="button" onClick={onLogout}>
+          Log out
+        </button>
+      </div>
+    </div>
+
     <header>
       <h2>Channels</h2>
-      <button className="ghost-btn" type="button" onClick={onCreateChannel}>
+      <button className="ghost-btn" type="button" onClick={onCreateChannel} disabled={!organizationName}>
         + New
       </button>
     </header>
 
     {isLoading && <p className="sidebar__hint">Loading channels…</p>}
-    {!isLoading && channels.length === 0 && (
+    {!isLoading && channels.length === 0 && organizationName && (
       <p className="sidebar__hint">Create your first channel to get started.</p>
     )}
 
