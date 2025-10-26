@@ -5,6 +5,13 @@ type ChannelSidebarProps = {
   selectedChannelId: string | null
   onSelectChannel: (channelId: string) => void
   onCreateChannel: () => void
+  onSwitchOrganization: () => void
+  onCreateOrganization: () => void
+  onSignOut: () => void
+  organizationName?: string | null
+  canSwitchOrganization?: boolean
+  userDisplayName?: string | null
+  userEmail?: string | null
   isLoading?: boolean
 }
 
@@ -13,18 +20,61 @@ export const ChannelSidebar = ({
   selectedChannelId,
   onSelectChannel,
   onCreateChannel,
+  onSwitchOrganization,
+  onCreateOrganization,
+  onSignOut,
+  organizationName,
+  canSwitchOrganization = false,
+  userDisplayName,
+  userEmail,
   isLoading = false
 }: ChannelSidebarProps) => (
   <aside className="sidebar">
+    <section className="sidebar__section">
+      <p className="sidebar__label">Organization</p>
+      <div className="sidebar__section-row">
+        <div>
+          <strong>{organizationName ?? 'No organization selected'}</strong>
+        </div>
+        <div className="sidebar__actions">
+          <button
+            className="ghost-btn"
+            type="button"
+            onClick={onSwitchOrganization}
+            disabled={!canSwitchOrganization}
+          >
+            Switch
+          </button>
+          <button className="ghost-btn" type="button" onClick={onCreateOrganization}>
+            + Org
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section className="sidebar__section">
+      <p className="sidebar__label">Account</p>
+      <div className="sidebar__section-row">
+        <div>
+          <strong>{userDisplayName ?? 'Anonymous'}</strong>
+          {userEmail && <small>{userEmail}</small>}
+        </div>
+        <button className="ghost-btn" type="button" onClick={onSignOut}>
+          Log out
+        </button>
+      </div>
+    </section>
+
     <header>
       <h2>Channels</h2>
-      <button className="ghost-btn" type="button" onClick={onCreateChannel}>
+      <button className="ghost-btn" type="button" onClick={onCreateChannel} disabled={!organizationName}>
         + New
       </button>
     </header>
 
-    {isLoading && <p className="sidebar__hint">Loading channels…</p>}
-    {!isLoading && channels.length === 0 && (
+    {!organizationName && <p className="sidebar__hint">Select or create an organization to see channels.</p>}
+    {organizationName && isLoading && <p className="sidebar__hint">Loading channels…</p>}
+    {organizationName && !isLoading && channels.length === 0 && (
       <p className="sidebar__hint">Create your first channel to get started.</p>
     )}
 

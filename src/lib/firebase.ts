@@ -1,4 +1,5 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
+import { getAuth, type Auth } from 'firebase/auth'
 import { getFirestore, type Firestore } from 'firebase/firestore'
 import { firebaseConfig } from '../firebaseConfig'
 
@@ -6,10 +7,12 @@ const isFirebaseConfigured = Object.values(firebaseConfig).every((value) => Bool
 
 let firebaseApp: FirebaseApp | null = null
 let db: Firestore | null = null
+let auth: Auth | null = null
 
 if (isFirebaseConfigured) {
   firebaseApp = initializeApp(firebaseConfig)
   db = getFirestore(firebaseApp)
+  auth = getAuth(firebaseApp)
 } else {
   console.warn('Firebase config is missing. Update src/firebaseConfig.ts when ready.')
 }
@@ -22,6 +25,16 @@ export const getDb = () => {
   }
 
   return db
+}
+
+export const getAuthInstance = () => {
+  if (!auth) {
+    throw new Error(
+      'Firebase has not been configured yet. Please update src/firebaseConfig.ts with your project credentials.'
+    )
+  }
+
+  return auth
 }
 
 export { firebaseApp, isFirebaseConfigured }

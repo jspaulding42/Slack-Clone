@@ -5,6 +5,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  where,
   type DocumentData,
   type Firestore,
   type QueryDocumentSnapshot,
@@ -17,6 +18,7 @@ export type Channel = {
   topic?: string
   createdAt?: Date
   createdBy?: string
+  organizationId: string
 }
 
 export type Message = {
@@ -44,6 +46,7 @@ const mapChannel = (doc: QueryDocumentSnapshot<DocumentData>): Channel => ({
   name: doc.get('name') ?? 'Untitled channel',
   topic: doc.get('topic') ?? undefined,
   createdBy: doc.get('createdBy') ?? undefined,
+  organizationId: doc.get('organizationId') ?? '',
   createdAt: mapTimestamp(doc, 'createdAt')
 })
 
@@ -56,9 +59,14 @@ const mapMessage = (doc: QueryDocumentSnapshot<DocumentData>): Message => ({
 
 export const listenToChannels = (
   db: Firestore,
+  organizationId: string,
   onUpdate: (channels: Channel[]) => void
 ): Unsubscribe => {
-  const channelsQuery = query(channelsCollection(db), orderBy('createdAt', 'asc'))
+  const channelsQuery = query(
+    channelsCollection(db),
+    where('organizationId', '==', organizationId),
+    orderBy('createdAt', 'asc')
+  )
   return onSnapshot(channelsQuery, (snapshot) => {
     onUpdate(snapshot.docs.map(mapChannel))
   })
@@ -80,7 +88,7 @@ export const listenToMessages = (
 
 export const createChannel = async (
   db: Firestore,
-  params: { name: string; topic?: string; createdBy: string }
+  params: { name: string; topic?: string; createdBy: string; organizationId: string }
 ) => {
   await addDoc(channelsCollection(db), {
     ...params,

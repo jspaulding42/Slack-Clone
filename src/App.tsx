@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
+import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase/auth'
 import './App.css'
 import { ChannelSidebar } from './components/ChannelSidebar'
 import { ChannelForm } from './components/ChannelForm'
 import { MessageList } from './components/MessageList'
 import { MessageInput } from './components/MessageInput'
-import { UserSetup } from './components/UserSetup'
-import { useLocalStorage } from './hooks/useLocalStorage'
+import { AuthModal } from './components/AuthModal'
+import { OrganizationPicker } from './components/OrganizationPicker'
+import { OrganizationForm } from './components/OrganizationForm'
 import {
   type Channel,
   type Message,
@@ -14,18 +16,51 @@ import {
   listenToMessages,
   sendMessage
 } from './lib/chatService'
-import { getDb, isFirebaseConfigured } from './lib/firebase'
+import { getAuthInstance, getDb, isFirebaseConfigured } from './lib/firebase'
+import {
+  type Organization,
+  type UserProfile,
+  createOrganization as createOrganizationRecord,
+  ensureUserProfile,
+  fetchOrganizationsForUser
+} from './lib/userService'
 
-type StoredUser = { displayName: string }
+const organizationStorageKey = (userId: string) => `slack-clone:organization:${userId}`
+
+const readStoredOrganizationId = (userId: string) => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  return window.localStorage.getItem(organizationStorageKey(userId))
+}
+
+const persistOrganizationId = (userId: string, organizationId: string | null) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+  const key = organizationStorageKey(userId)
+  if (!organizationId) {
+    window.localStorage.removeItem(key)
+    return
+  }
+  window.localStorage.setItem(key, organizationId)
+}
 
 function App() {
-  const [user, setUser] = useLocalStorage<StoredUser | null>('slack-clone:user', null)
+  const [authReady, setAuthReady] = useState(false)
+  const [authUser, setAuthUser] = useState<FirebaseUser | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [organizationsLoading, setOrganizationsLoading] = useState(false)
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(null)
   const [channels, setChannels] = useState<Channel[]>([])
   const [channelsLoading, setChannelsLoading] = useState(false)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [showChannelForm, setShowChannelForm] = useState(false)
+  const [showOrganizationPicker, setShowOrganizationPicker] = useState(false)
+  const [showOrganizationForm, setShowOrganizationForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -33,35 +68,132 @@ function App() {
       return
     }
 
-    const db = getDb()
-    setChannelsLoading(true)
-    const unsubscribe = listenToChannels(db, (collection) => {
-      setChannels(collection)
-      setChannelsLoading(false)
-      setSelectedChannelId((current) => {
-        if (current) {
-          return current
-        }
-
-        return collection[0]?.id ?? null
-      })
+    const auth = getAuthInstance()
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user)
+      setAuthReady(true)
     })
 
     return () => unsubscribe()
   }, [])
 
   useEffect(() => {
-    if (channels.length === 0) {
+    if (!authUser) {
+      setProfile(null)
+      return
+    }
+
+    let cancelled = false
+    const loadProfile = async () => {
+      try {
+        const db = getDb()
+        const userProfile = await ensureUserProfile(db, {
+          uid: authUser.uid,
+          email: authUser.email ?? '',
+          displayName: authUser.displayName ?? authUser.email ?? 'Anonymous'
+        })
+        if (!cancelled) {
+          setProfile(userProfile)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Unable to load profile.'
+          setError(message)
+        }
+      }
+    }
+
+    loadProfile()
+    return () => {
+      cancelled = true
+    }
+  }, [authUser])
+
+  useEffect(() => {
+    if (!authUser) {
+      setOrganizations([])
+      setSelectedOrganizationId(null)
+      setOrganizationsLoading(false)
+      setChannels([])
+      setSelectedChannelId(null)
+      setMessages([])
+      setShowChannelForm(false)
+      setShowOrganizationPicker(false)
+      setShowOrganizationForm(false)
+      return
+    }
+
+    let cancelled = false
+    const loadOrganizations = async () => {
+      try {
+        setOrganizationsLoading(true)
+        const db = getDb()
+        const collection = await fetchOrganizationsForUser(db, authUser.uid)
+        if (cancelled) {
+          return
+        }
+        setOrganizations(collection)
+        setOrganizationsLoading(false)
+        setSelectedOrganizationId((current) => {
+          if (current && collection.some((org) => org.id === current)) {
+            return current
+          }
+          const stored = readStoredOrganizationId(authUser.uid)
+          if (stored && collection.some((org) => org.id === stored)) {
+            return stored
+          }
+          return collection[0]?.id ?? null
+        })
+        if (collection.length > 1 && !readStoredOrganizationId(authUser.uid)) {
+          setShowOrganizationPicker(true)
+        } else {
+          setShowOrganizationPicker(false)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Unable to load organizations.'
+          setError(message)
+          setOrganizationsLoading(false)
+        }
+      }
+    }
+
+    loadOrganizations()
+    return () => {
+      cancelled = true
+    }
+  }, [authUser])
+
+  useEffect(() => {
+    if (!authUser) {
+      return
+    }
+    persistOrganizationId(authUser.uid, selectedOrganizationId)
+  }, [authUser, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!isFirebaseConfigured || !selectedOrganizationId) {
+      setChannels([])
+      setChannelsLoading(false)
       setSelectedChannelId(null)
       return
     }
 
-    if (selectedChannelId && channels.some((channel) => channel.id === selectedChannelId)) {
-      return
-    }
+    const db = getDb()
+    setChannelsLoading(true)
+    const unsubscribe = listenToChannels(db, selectedOrganizationId, (collection) => {
+      setChannels(collection)
+      setChannelsLoading(false)
+      setSelectedChannelId((current) => {
+        if (current && collection.some((channel) => channel.id === current)) {
+          return current
+        }
+        return collection[0]?.id ?? null
+      })
+    })
 
-    setSelectedChannelId(channels[0]?.id ?? null)
-  }, [channels, selectedChannelId])
+    return () => unsubscribe()
+  }, [selectedOrganizationId])
 
   useEffect(() => {
     if (!isFirebaseConfigured || !selectedChannelId) {
@@ -80,20 +212,29 @@ function App() {
     return () => unsubscribe()
   }, [selectedChannelId])
 
+  const selectedOrganization = useMemo(
+    () => organizations.find((org) => org.id === selectedOrganizationId) ?? null,
+    [organizations, selectedOrganizationId]
+  )
+
   const selectedChannel = useMemo(
     () => channels.find((channel) => channel.id === selectedChannelId) ?? null,
     [channels, selectedChannelId]
   )
 
   const handleCreateChannel = async (values: { name: string; topic?: string }) => {
-    if (!user) {
+    if (!profile || !selectedOrganizationId) {
       return
     }
 
     try {
       setError(null)
       const db = getDb()
-      await createChannel(db, { ...values, createdBy: user.displayName })
+      await createChannel(db, {
+        ...values,
+        createdBy: profile.displayName,
+        organizationId: selectedOrganizationId
+      })
       setShowChannelForm(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create channel.'
@@ -103,19 +244,51 @@ function App() {
   }
 
   const handleSendMessage = async (text: string) => {
-    if (!user || !selectedChannelId) {
+    if (!profile || !selectedChannelId) {
       return
     }
 
     try {
       setError(null)
       const db = getDb()
-      await sendMessage(db, selectedChannelId, { text, author: user.displayName })
+      await sendMessage(db, selectedChannelId, { text, author: profile.displayName })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to send message.'
       setError(message)
       throw err
     }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      const auth = getAuthInstance()
+      await signOut(auth)
+      setSelectedOrganizationId(null)
+      setOrganizations([])
+      setChannels([])
+      setMessages([])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to sign out right now.'
+      setError(message)
+    }
+  }
+
+  const handleSelectOrganization = (organizationId: string) => {
+    setSelectedOrganizationId(organizationId)
+    setShowOrganizationPicker(false)
+  }
+
+  const handleCreateOrganization = async (name: string) => {
+    if (!profile) {
+      throw new Error('You need an account to create an organization.')
+    }
+
+    const db = getDb()
+    const organization = await createOrganizationRecord(db, { name, user: profile })
+    setOrganizations((current) => [...current, organization].sort((a, b) => a.name.localeCompare(b.name)))
+    setSelectedOrganizationId(organization.id)
+    setShowOrganizationForm(false)
+    setShowOrganizationPicker(false)
   }
 
   if (!isFirebaseConfigured) {
@@ -137,6 +310,21 @@ function App() {
     )
   }
 
+  if (!authReady) {
+    return (
+      <div className="app-shell setup-state">
+        <div className="config-card">
+          <h1>Loading workspace…</h1>
+          <p>Connecting to Firebase. Hang tight!</p>
+        </div>
+      </div>
+    )
+  }
+
+  const userDisplayName = profile?.displayName ?? authUser?.displayName ?? authUser?.email ?? 'Anonymous'
+  const userEmail = profile?.email ?? authUser?.email ?? null
+  const canSwitchOrganization = organizations.length > 1
+
   return (
     <div className="app-shell">
       <ChannelSidebar
@@ -144,23 +332,77 @@ function App() {
         selectedChannelId={selectedChannelId}
         onSelectChannel={setSelectedChannelId}
         onCreateChannel={() => setShowChannelForm(true)}
+        onSwitchOrganization={() => setShowOrganizationPicker(true)}
+        onCreateOrganization={() => setShowOrganizationForm(true)}
+        onSignOut={handleSignOut}
+        organizationName={selectedOrganization?.name}
+        canSwitchOrganization={canSwitchOrganization}
+        userDisplayName={userDisplayName}
+        userEmail={userEmail}
         isLoading={channelsLoading}
       />
       <main>
-        <MessageList channel={selectedChannel} messages={messages} isLoading={messagesLoading} />
-        <MessageInput
-          onSend={handleSendMessage}
-          disabled={!selectedChannel || !user}
-          channelName={selectedChannel?.name}
-        />
+        {selectedOrganization ? (
+          <>
+            <MessageList channel={selectedChannel} messages={messages} isLoading={messagesLoading} />
+            <MessageInput
+              onSend={handleSendMessage}
+              disabled={!selectedChannel || !profile}
+              channelName={selectedChannel?.name}
+            />
+          </>
+        ) : (
+          <section className="message-panel">
+            <div className="message-panel__empty">
+              <h3>{organizations.length === 0 ? 'Create your first organization' : 'Select an organization'}</h3>
+              {organizationsLoading ? (
+                <p>Loading your organizations…</p>
+              ) : (
+                <>
+                  <p>Workspaces keep your channels separated. Create one or choose an existing workspace.</p>
+                  <div className="message-panel__actions">
+                    <button className="primary-btn" type="button" onClick={() => setShowOrganizationForm(true)}>
+                      Create organization
+                    </button>
+                    {canSwitchOrganization && (
+                      <button className="ghost-btn" type="button" onClick={() => setShowOrganizationPicker(true)}>
+                        Choose organization
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        )}
         {error && <p className="form-error global-error">{error}</p>}
       </main>
 
-      {showChannelForm && (
+      {showChannelForm && selectedOrganization && (
         <ChannelForm onSubmit={handleCreateChannel} onCancel={() => setShowChannelForm(false)} />
       )}
 
-      {!user && <UserSetup onComplete={(displayName) => setUser({ displayName })} />}
+      {showOrganizationPicker && organizations.length > 1 && (
+        <OrganizationPicker
+          organizations={organizations}
+          isOpen={showOrganizationPicker}
+          onSelect={handleSelectOrganization}
+          onClose={() => setShowOrganizationPicker(false)}
+          onCreateRequested={() => {
+            setShowOrganizationPicker(false)
+            setShowOrganizationForm(true)
+          }}
+        />
+      )}
+
+      {showOrganizationForm && (
+        <OrganizationForm
+          onSubmit={handleCreateOrganization}
+          onCancel={() => setShowOrganizationForm(false)}
+        />
+      )}
+
+      {authReady && !authUser && <AuthModal />}
     </div>
   )
 }
