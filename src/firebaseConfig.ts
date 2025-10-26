@@ -1,7 +1,7 @@
 // Replace the empty strings with your Firebase project configuration.
 // You can find these values in the Firebase console under Project Settings.
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyAjagyEhxJsNXTtepchRAxjK4l99e5qykg",
   authDomain: "slack-clone-407c8.firebaseapp.com",
   projectId: "slack-clone-407c8",
