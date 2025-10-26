@@ -181,16 +181,27 @@ function App() {
 
     const db = getDb()
     setChannelsLoading(true)
-    const unsubscribe = listenToChannels(db, selectedOrganizationId, (collection) => {
-      setChannels(collection)
-      setChannelsLoading(false)
-      setSelectedChannelId((current) => {
-        if (current && collection.some((channel) => channel.id === current)) {
-          return current
-        }
-        return collection[0]?.id ?? null
-      })
-    })
+    const unsubscribe = listenToChannels(
+      db,
+      selectedOrganizationId,
+      (collection) => {
+        setChannels(collection)
+        setChannelsLoading(false)
+        setSelectedChannelId((current) => {
+          if (current && collection.some((channel) => channel.id === current)) {
+            return current
+          }
+          return collection[0]?.id ?? null
+        })
+      },
+      (listenerError) => {
+        setChannels([])
+        setChannelsLoading(false)
+        const message =
+          listenerError instanceof Error ? listenerError.message : 'Unable to load channels right now.'
+        setError(message)
+      }
+    )
 
     return () => unsubscribe()
   }, [selectedOrganizationId])

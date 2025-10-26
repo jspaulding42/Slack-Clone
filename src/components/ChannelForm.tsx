@@ -22,7 +22,12 @@ export const ChannelForm = ({ onSubmit, onCancel }: ChannelFormProps) => {
     try {
       setError(null)
       setIsSubmitting(true)
-      await onSubmit({ name: name.trim(), topic: topic.trim() || undefined })
+      const payload: { name: string; topic?: string } = { name: name.trim() }
+      const cleanedTopic = topic.trim()
+      if (cleanedTopic) {
+        payload.topic = cleanedTopic
+      }
+      await onSubmit(payload)
       setName('')
       setTopic('')
     } catch (err) {

@@ -60,16 +60,31 @@ const mapMessage = (doc: QueryDocumentSnapshot<DocumentData>): Message => ({
 export const listenToChannels = (
   db: Firestore,
   organizationId: string,
-  onUpdate: (channels: Channel[]) => void
+  onUpdate: (channels: Channel[]) => void,
+  onError?: (error: Error) => void
 ): Unsubscribe => {
-  const channelsQuery = query(
-    channelsCollection(db),
-    where('organizationId', '==', organizationId),
-    orderBy('createdAt', 'asc')
+  const channelsQuery = query(channelsCollection(db), where('organizationId', '==', organizationId))
+  return onSnapshot(
+    channelsQuery,
+    (snapshot) => {
+      const channels = snapshot
+        .docs
+        .map(mapChannel)
+        .sort((a, b) => {
+          const aTime = a.createdAt?.getTime() ?? 0
+          const bTime = b.createdAt?.getTime() ?? 0
+          return aTime - bTime
+        })
+      onUpdate(channels)
+    },
+    (error) => {
+      if (onError) {
+        onError(error)
+      } else {
+        console.error('Channel listener error', error)
+      }
+    }
   )
-  return onSnapshot(channelsQuery, (snapshot) => {
-    onUpdate(snapshot.docs.map(mapChannel))
-  })
 }
 
 export const listenToMessages = (
@@ -90,8 +105,10 @@ export const createChannel = async (
   db: Firestore,
   params: { name: string; topic?: string; createdBy: string; organizationId: string }
 ) => {
+  const { topic, ...rest } = params
   await addDoc(channelsCollection(db), {
-    ...params,
+    ...rest,
+    ...(topic ? { topic } : {}),
     createdAt: serverTimestamp()
   })
 }
