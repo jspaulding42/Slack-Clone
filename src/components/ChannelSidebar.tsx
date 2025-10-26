@@ -33,7 +33,7 @@ export const ChannelSidebar = ({
     <section className="sidebar__section">
       <p className="sidebar__label">Organization</p>
       <div className="sidebar__section-row">
-        <div>
+        <div className="sidebar__section-copy">
           <strong>{organizationName ?? 'No organization selected'}</strong>
         </div>
         <div className="sidebar__actions">
@@ -55,7 +55,7 @@ export const ChannelSidebar = ({
     <section className="sidebar__section">
       <p className="sidebar__label">Account</p>
       <div className="sidebar__section-row">
-        <div>
+        <div className="sidebar__section-copy">
           <strong>{userDisplayName ?? 'Anonymous'}</strong>
           {userEmail && <small>{userEmail}</small>}
         </div>
@@ -65,32 +65,39 @@ export const ChannelSidebar = ({
       </div>
     </section>
 
-    <header>
-      <h2>Channels</h2>
-      <button className="ghost-btn" type="button" onClick={onCreateChannel} disabled={!organizationName}>
-        + New
-      </button>
-    </header>
+    <section className="sidebar__channels">
+      <header className="sidebar__channels-header">
+        <div>
+          <p className="sidebar__label">Browse</p>
+          <h2>Channels</h2>
+        </div>
+        <button className="ghost-btn" type="button" onClick={onCreateChannel} disabled={!organizationName}>
+          + New
+        </button>
+      </header>
 
-    {!organizationName && <p className="sidebar__hint">Select or create an organization to see channels.</p>}
-    {organizationName && isLoading && <p className="sidebar__hint">Loading channels…</p>}
-    {organizationName && !isLoading && channels.length === 0 && (
-      <p className="sidebar__hint">Create your first channel to get started.</p>
-    )}
+      {!organizationName && (
+        <p className="sidebar__hint">Select or create an organization to see channels.</p>
+      )}
+      {organizationName && isLoading && <p className="sidebar__hint">Loading channels…</p>}
+      {organizationName && !isLoading && channels.length === 0 && (
+        <p className="sidebar__hint">Create your first channel to get started.</p>
+      )}
 
-    <ul>
-      {channels.map((channel) => (
-        <li key={channel.id}>
-          <button
-            className={channel.id === selectedChannelId ? 'channel-btn active' : 'channel-btn'}
-            type="button"
-            onClick={() => onSelectChannel(channel.id)}
-          >
-            <span># {channel.name}</span>
-            {channel.topic && <small>{channel.topic}</small>}
-          </button>
-        </li>
-      ))}
-    </ul>
+      <ul className="sidebar__channel-list">
+        {channels.map((channel) => (
+          <li key={channel.id}>
+            <button
+              className={channel.id === selectedChannelId ? 'channel-btn active' : 'channel-btn'}
+              type="button"
+              onClick={() => onSelectChannel(channel.id)}
+            >
+              <span className="channel-btn__name"># {channel.name}</span>
+              {channel.topic && <small className="channel-btn__topic">{channel.topic}</small>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   </aside>
 )
