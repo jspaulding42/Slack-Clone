@@ -8,6 +8,7 @@ import { MessageInput } from './components/MessageInput'
 import { AuthModal } from './components/AuthModal'
 import { OrganizationPicker } from './components/OrganizationPicker'
 import { OrganizationForm } from './components/OrganizationForm'
+import { ProfileForm } from './components/ProfileForm'
 import {
   type Channel,
   type Message,
@@ -62,6 +63,7 @@ function App() {
   const [showChannelForm, setShowChannelForm] = useState(false)
   const [showOrganizationPicker, setShowOrganizationPicker] = useState(false)
   const [showOrganizationForm, setShowOrganizationForm] = useState(false)
+  const [showProfileForm, setShowProfileForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -121,6 +123,7 @@ function App() {
       setShowChannelForm(false)
       setShowOrganizationPicker(false)
       setShowOrganizationForm(false)
+      setShowProfileForm(false)
       return
     }
 
@@ -339,7 +342,12 @@ function App() {
 
   const userDisplayName = profile?.displayName ?? authUser?.displayName ?? authUser?.email ?? 'Anonymous'
   const userEmail = profile?.email ?? authUser?.email ?? null
+  const userProfilePictureUrl = profile?.profilePictureUrl ?? null
   const canSwitchOrganization = organizations.length > 1
+
+  const handleProfileUpdate = (updatedProfile: UserProfile) => {
+    setProfile(updatedProfile)
+  }
 
   return (
     <div className="app-shell">
@@ -351,10 +359,12 @@ function App() {
         onSwitchOrganization={() => setShowOrganizationPicker(true)}
         onCreateOrganization={() => setShowOrganizationForm(true)}
         onSignOut={handleSignOut}
+        onEditProfile={() => setShowProfileForm(true)}
         organizationName={selectedOrganization?.name}
         canSwitchOrganization={canSwitchOrganization}
         userDisplayName={userDisplayName}
         userEmail={userEmail}
+        userProfilePictureUrl={userProfilePictureUrl}
         isLoading={channelsLoading}
       />
       <main>
@@ -421,6 +431,14 @@ function App() {
         <OrganizationForm
           onSubmit={handleCreateOrganization}
           onCancel={() => setShowOrganizationForm(false)}
+        />
+      )}
+
+      {showProfileForm && profile && (
+        <ProfileForm
+          profile={profile}
+          onClose={() => setShowProfileForm(false)}
+          onProfileUpdate={handleProfileUpdate}
         />
       )}
 

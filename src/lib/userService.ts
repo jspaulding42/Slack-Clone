@@ -7,6 +7,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
   type DocumentData,
   type DocumentReference,
@@ -18,6 +19,10 @@ export type UserProfile = {
   id: string
   email: string
   displayName: string
+  phoneNumber?: string
+  profilePictureUrl?: string
+  createdAt?: any
+  updatedAt?: any
 }
 
 export type Organization = {
@@ -72,7 +77,11 @@ export const ensureUserProfile = async (
   return {
     id: params.uid,
     email: params.email,
-    displayName: params.displayName
+    displayName: params.displayName,
+    phoneNumber: undefined,
+    profilePictureUrl: undefined,
+    createdAt: profile.createdAt,
+    updatedAt: undefined
   }
 }
 
@@ -86,7 +95,11 @@ export const getUserProfile = async (db: Firestore, userId: string): Promise<Use
   return {
     id: snapshot.id,
     email: data.email ?? '',
-    displayName: data.displayName ?? ''
+    displayName: data.displayName ?? '',
+    phoneNumber: data.phoneNumber ?? undefined,
+    profilePictureUrl: data.profilePictureUrl ?? undefined,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt
   }
 }
 
@@ -124,4 +137,32 @@ export const createOrganization = async (
     createdBy: params.user.id,
     createdByDisplayName: params.user.displayName
   }
+}
+
+export const updateUserProfile = async (
+  db: Firestore,
+  userId: string,
+  updates: Partial<Pick<UserProfile, 'displayName' | 'phoneNumber' | 'profilePictureUrl'>>
+): Promise<void> => {
+  const ref = userDoc(db, userId)
+  
+  // Clean up the updates - remove undefined values and convert empty strings to null
+  const cleanedUpdates: any = {
+    updatedAt: serverTimestamp()
+  }
+  
+  if (updates.displayName !== undefined) {
+    cleanedUpdates.displayName = updates.displayName
+  }
+  
+  if (updates.phoneNumber !== undefined) {
+    // Convert empty string to null for Firestore
+    cleanedUpdates.phoneNumber = updates.phoneNumber === '' ? null : updates.phoneNumber
+  }
+  
+  if (updates.profilePictureUrl !== undefined) {
+    cleanedUpdates.profilePictureUrl = updates.profilePictureUrl
+  }
+  
+  await updateDoc(ref, cleanedUpdates)
 }

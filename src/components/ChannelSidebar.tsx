@@ -8,10 +8,12 @@ type ChannelSidebarProps = {
   onSwitchOrganization: () => void
   onCreateOrganization: () => void
   onSignOut: () => void
+  onEditProfile: () => void
   organizationName?: string | null
   canSwitchOrganization?: boolean
   userDisplayName?: string | null
   userEmail?: string | null
+  userProfilePictureUrl?: string | null
   isLoading?: boolean
 }
 
@@ -23,10 +25,12 @@ export const ChannelSidebar = ({
   onSwitchOrganization,
   onCreateOrganization,
   onSignOut,
+  onEditProfile,
   organizationName,
   canSwitchOrganization = false,
   userDisplayName,
   userEmail,
+  userProfilePictureUrl,
   isLoading = false
 }: ChannelSidebarProps) => (
   <aside className="sidebar">
@@ -55,13 +59,33 @@ export const ChannelSidebar = ({
     <section className="sidebar__section">
       <p className="sidebar__label">Account</p>
       <div className="sidebar__section-row">
-        <div className="sidebar__section-copy">
-          <strong>{userDisplayName ?? 'Anonymous'}</strong>
-          {userEmail && <small>{userEmail}</small>}
+        <div className="sidebar__user-info">
+          <div className="sidebar__user-avatar">
+            {userProfilePictureUrl ? (
+              <img 
+                src={userProfilePictureUrl} 
+                alt="Profile" 
+                className="sidebar__user-avatar-img"
+              />
+            ) : (
+              <div className="sidebar__user-avatar-placeholder">
+                {(userDisplayName ?? 'A').charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="sidebar__section-copy">
+            <strong>{userDisplayName ?? 'Anonymous'}</strong>
+            {userEmail && <small>{userEmail}</small>}
+          </div>
         </div>
-        <button className="ghost-btn" type="button" onClick={onSignOut}>
-          Log out
-        </button>
+        <div className="sidebar__actions">
+          <button className="ghost-btn" type="button" onClick={onEditProfile}>
+            Edit Profile
+          </button>
+          <button className="ghost-btn" type="button" onClick={onSignOut}>
+            Log out
+          </button>
+        </div>
       </div>
     </section>
 
