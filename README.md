@@ -1,73 +1,68 @@
-# React + TypeScript + Vite
+# Slack Clone (Vite + React + Firebase)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A lightweight Slack-style chat client built with React 19, TypeScript, and Vite. It uses
+Firebase for persistence and real-time updates (channels + messages) and keeps everything
+client-side so you can drop in your Firebase project keys to get moving quickly.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Channel list with live updates powered by Firestore listeners
+- Create new channels with optional topics
+- Real-time message stream with avatars, timestamps, and optimistic loading
+- Local display-name capture (stored in localStorage) for simple identity
+- Graceful fallback UI when Firebase credentials are missing
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **Install dependencies**
 
-## Expanding the ESLint configuration
+   ```bash
+   npm install
+   ```
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+2. **Provide Firebase credentials**
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+   - Open `src/firebaseConfig.ts` and replace the placeholder strings with the config
+     from your Firebase console (Project Settings → General → Your apps → Web app).
+   - Ensure Cloud Firestore is enabled in your Firebase project.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+3. **Start the dev server**
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+   ```bash
+   npm run dev
+   ```
+
+   The app will load at the URL printed in the console. You are prompted to choose a
+   display name the first time you open it.
+
+## Firebase Data Model
+
+```text
+channels (collection)
+  └── {channelId}
+        • name        string
+        • topic       string | null
+        • createdBy   string
+        • createdAt   serverTimestamp
+        └── messages (sub-collection)
+              └── {messageId}
+                    • text       string
+                    • author     string
+                    • createdAt  serverTimestamp
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The UI listens to both collections with `onSnapshot`, so creating channels or sending
+messages reflects instantly across connected clients.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Scripts
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `npm run dev` – start Vite in development mode
+- `npm run build` – type-check and build for production
+- `npm run preview` – run the built app locally
+- `npm run lint` – run ESLint on the project
+
+## Next Steps
+
+- Wire up Firebase Authentication if you need stronger identity guarantees
+- Add reactions / thread support by extending the Firestore schema
+- Deploy behind Firebase Hosting, Vercel, or Netlify once you are happy with the UX
