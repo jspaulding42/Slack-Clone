@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 
 type ChannelFormProps = {
   onSubmit: (values: { name: string; topic?: string }) => Promise<void> | void

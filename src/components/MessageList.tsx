@@ -1,4 +1,5 @@
 import type { Message, Channel } from '../lib/chatService'
+import { AttachmentDisplay } from './AttachmentDisplay'
 
 type MessageListProps = {
   channel?: Channel | null
@@ -47,7 +48,17 @@ export const MessageList = ({ channel, messages, isLoading = false }: MessageLis
                 <strong>{message.author}</strong>
                 <span>{formatTime(message.createdAt)}</span>
               </div>
-              <p>{message.text}</p>
+              {message.text && <p>{message.text}</p>}
+              {message.attachments && message.attachments.length > 0 && (
+                <div className="message__attachments">
+                  {message.attachments.map((attachment) => (
+                    <AttachmentDisplay
+                      key={attachment.id}
+                      attachment={attachment}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </article>
         ))}

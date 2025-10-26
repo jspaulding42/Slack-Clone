@@ -26,6 +26,20 @@ export type Message = {
   text: string
   author: string
   createdAt?: Date
+  attachments: MessageAttachment[]
+}
+
+export type MessageAttachment = {
+  id: string
+  name: string
+  size: number
+  contentType?: string
+  url: string
+  storagePath?: string
+  thumbnailUrl?: string
+  thumbnailStoragePath?: string
+  thumbnailWidth?: number
+  thumbnailHeight?: number
 }
 
 const channelsCollection = (db: Firestore) => collection(db, 'channels')
@@ -54,8 +68,49 @@ const mapMessage = (doc: QueryDocumentSnapshot<DocumentData>): Message => ({
   id: doc.id,
   text: doc.get('text') ?? '',
   author: doc.get('author') ?? 'Unknown',
-  createdAt: mapTimestamp(doc, 'createdAt')
+  createdAt: mapTimestamp(doc, 'createdAt'),
+  attachments: mapAttachments(doc.get('attachments'))
 })
+
+const mapAttachments = (value: unknown): MessageAttachment[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => mapAttachment(item))
+    .filter((attachment): attachment is MessageAttachment => Boolean(attachment))
+}
+
+const mapAttachment = (value: unknown): MessageAttachment | null => {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const data = value as Record<string, unknown>
+  if (typeof data.url !== 'string' || typeof data.name !== 'string') {
+    return null
+  }
+
+  const fallbackId =
+    (typeof data.storagePath === 'string' && data.storagePath) ||
+    (typeof data.url === 'string' && data.url) ||
+    ''
+
+  return {
+    id: typeof data.id === 'string' ? data.id : fallbackId,
+    name: data.name,
+    size: typeof data.size === 'number' ? data.size : 0,
+    contentType: typeof data.contentType === 'string' ? data.contentType : undefined,
+    url: data.url,
+    storagePath: typeof data.storagePath === 'string' ? data.storagePath : undefined,
+    thumbnailUrl: typeof data.thumbnailUrl === 'string' ? data.thumbnailUrl : undefined,
+    thumbnailStoragePath:
+      typeof data.thumbnailStoragePath === 'string' ? data.thumbnailStoragePath : undefined,
+    thumbnailWidth: typeof data.thumbnailWidth === 'number' ? data.thumbnailWidth : undefined,
+    thumbnailHeight: typeof data.thumbnailHeight === 'number' ? data.thumbnailHeight : undefined
+  }
+}
 
 export const listenToChannels = (
   db: Firestore,
@@ -116,10 +171,25 @@ export const createChannel = async (
 export const sendMessage = async (
   db: Firestore,
   channelId: string,
-  params: { text: string; author: string }
+  params: { text: string; author: string; attachments?: MessageAttachment[] }
 ) => {
+  const trimmedText = params.text.trim()
+  
+  // Filter out undefined values from attachments before saving to Firestore
+  const cleanAttachments = params.attachments?.map(attachment => {
+    const clean: Record<string, any> = {}
+    Object.entries(attachment).forEach(([key, value]) => {
+      if (value !== undefined) {
+        clean[key] = value
+      }
+    })
+    return clean
+  })
+  
   await addDoc(channelMessagesCollection(db, channelId), {
-    ...params,
-    createdAt: serverTimestamp()
+    text: trimmedText,
+    author: params.author,
+    createdAt: serverTimestamp(),
+    ...(cleanAttachments?.length ? { attachments: cleanAttachments } : {})
   })
 }
