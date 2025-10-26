@@ -244,11 +244,38 @@ main {
 .message-panel header {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .message-panel h2 {
   margin: 0;
   font-size: 1.4rem;
+}
+
+.message-search {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.message-search input {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(6, 8, 13, 0.7);
+  padding: 0.45rem 0.95rem;
+  min-width: 220px;
+  color: inherit;
+}
+
+.message-search__highlight {
+  background: rgba(116, 192, 252, 0.25);
+  padding: 0 0.05rem;
+  border-radius: 4px;
 }
 
 .message-panel .topic {

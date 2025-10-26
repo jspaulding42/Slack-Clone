@@ -58,6 +58,7 @@ function App() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [messagesLoading, setMessagesLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [showChannelForm, setShowChannelForm] = useState(false)
   const [showOrganizationPicker, setShowOrganizationPicker] = useState(false)
   const [showOrganizationForm, setShowOrganizationForm] = useState(false)
@@ -223,6 +224,10 @@ function App() {
     return () => unsubscribe()
   }, [selectedChannelId])
 
+  useEffect(() => {
+    setSearchQuery('')
+  }, [selectedChannelId])
+
   const selectedOrganization = useMemo(
     () => organizations.find((org) => org.id === selectedOrganizationId) ?? null,
     [organizations, selectedOrganizationId]
@@ -355,7 +360,13 @@ function App() {
       <main>
         {selectedOrganization ? (
           <>
-            <MessageList channel={selectedChannel} messages={messages} isLoading={messagesLoading} />
+            <MessageList
+              channel={selectedChannel}
+              messages={messages}
+              isLoading={messagesLoading}
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+            />
             <MessageInput
               onSend={handleSendMessage}
               disabled={!selectedChannel || !profile}
