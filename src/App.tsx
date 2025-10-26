@@ -12,6 +12,7 @@ import { ProfileForm } from './components/ProfileForm'
 import {
   type Channel,
   type Message,
+  type MessageAttachment,
   createChannel,
   listenToChannels,
   listenToMessages,
@@ -262,7 +263,7 @@ function App() {
     }
   }
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, attachments?: MessageAttachment[]) => {
     if (!profile || !selectedChannelId) {
       return
     }
@@ -270,7 +271,11 @@ function App() {
     try {
       setError(null)
       const db = getDb()
-      await sendMessage(db, selectedChannelId, { text, author: profile.displayName })
+      await sendMessage(db, selectedChannelId, { 
+        text, 
+        author: profile.displayName,
+        attachments 
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to send message.'
       setError(message)

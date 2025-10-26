@@ -43,7 +43,7 @@ export const getAuthInstance = () => {
 export const getStorageInstance = () => {
   if (!storage) {
     throw new Error(
-      'Firebase Storage has not been configured yet. Please update src/firebaseConfig.ts with your project credentials.'
+      'Firebase has not been configured yet. Please update src/firebaseConfig.ts with your project credentials.'
     )
   }
 

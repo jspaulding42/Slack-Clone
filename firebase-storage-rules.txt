@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow users to upload, read, and delete their own profile pictures
+    match /profile-pictures/{userId}/{allPaths=**} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow authenticated users to read other users' profile pictures (for display)
+    match /profile-pictures/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+    }
+    
+    // Allow authenticated users to upload, read, and delete attachments
+    match /attachments/{allPaths=**} {
+      allow read, write, delete: if request.auth != null;
+    }
+  }
+}
