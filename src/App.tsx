@@ -458,6 +458,7 @@ function App() {
               isLoading={messagesLoading}
               searchQuery={searchQuery}
               onSearchQueryChange={setSearchQuery}
+              currentUserName={userDisplayName}
             />
             <MessageInput
               onSend={handleSendMessage}
