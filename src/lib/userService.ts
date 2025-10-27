@@ -59,7 +59,11 @@ export const ensureUserProfile = async (
     return {
       id: snapshot.id,
       email: existing.email ?? params.email,
-      displayName: existing.displayName ?? params.displayName
+      displayName: existing.displayName ?? params.displayName,
+      phoneNumber: existing.phoneNumber ?? undefined,
+      profilePictureUrl: existing.profilePictureUrl ?? undefined,
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt
     }
   }
 
