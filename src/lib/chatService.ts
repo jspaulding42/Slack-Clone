@@ -27,6 +27,7 @@ export type Message = {
   author: string
   createdAt?: Date
   attachments: MessageAttachment[]
+  authorProfilePictureUrl?: string
 }
 
 export type MessageAttachment = {
@@ -64,13 +65,22 @@ const mapChannel = (doc: QueryDocumentSnapshot<DocumentData>): Channel => ({
   createdAt: mapTimestamp(doc, 'createdAt')
 })
 
-const mapMessage = (doc: QueryDocumentSnapshot<DocumentData>): Message => ({
-  id: doc.id,
-  text: doc.get('text') ?? '',
-  author: doc.get('author') ?? 'Unknown',
-  createdAt: mapTimestamp(doc, 'createdAt'),
-  attachments: mapAttachments(doc.get('attachments'))
-})
+const mapMessage = (doc: QueryDocumentSnapshot<DocumentData>): Message => {
+  const profilePictureValue = doc.get('authorProfilePictureUrl')
+  const authorProfilePictureUrl =
+    typeof profilePictureValue === 'string' && profilePictureValue.trim().length > 0
+      ? profilePictureValue
+      : undefined
+
+  return {
+    id: doc.id,
+    text: doc.get('text') ?? '',
+    author: doc.get('author') ?? 'Unknown',
+    createdAt: mapTimestamp(doc, 'createdAt'),
+    attachments: mapAttachments(doc.get('attachments')),
+    authorProfilePictureUrl
+  }
+}
 
 const mapAttachments = (value: unknown): MessageAttachment[] => {
   if (!Array.isArray(value)) {
@@ -171,25 +181,40 @@ export const createChannel = async (
 export const sendMessage = async (
   db: Firestore,
   channelId: string,
-  params: { text: string; author: string; attachments?: MessageAttachment[] }
+  params: {
+    text: string
+    author: string
+    attachments?: MessageAttachment[]
+    authorProfilePictureUrl?: string | null
+  }
 ) => {
   const trimmedText = params.text.trim()
   
   // Filter out undefined values from attachments before saving to Firestore
-  const cleanAttachments = params.attachments?.map(attachment => {
-    const clean: Record<string, any> = {}
+  const cleanAttachments = params.attachments?.map((attachment) => {
+    const clean: Partial<MessageAttachment> = {}
     Object.entries(attachment).forEach(([key, value]) => {
       if (value !== undefined) {
-        clean[key] = value
+        // TypeScript cannot infer the specific key, so cast through unknown.
+        (clean as Record<string, unknown>)[key] = value
       }
     })
-    return clean
+    return clean as MessageAttachment
   })
   
-  await addDoc(channelMessagesCollection(db, channelId), {
+  const payload: Record<string, unknown> = {
     text: trimmedText,
     author: params.author,
-    createdAt: serverTimestamp(),
-    ...(cleanAttachments?.length ? { attachments: cleanAttachments } : {})
-  })
+    createdAt: serverTimestamp()
+  }
+
+  if (cleanAttachments?.length) {
+    payload.attachments = cleanAttachments
+  }
+
+  if (params.authorProfilePictureUrl) {
+    payload.authorProfilePictureUrl = params.authorProfilePictureUrl
+  }
+
+  await addDoc(channelMessagesCollection(db, channelId), payload)
 }

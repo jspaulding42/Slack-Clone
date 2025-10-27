@@ -43,7 +43,18 @@ export const MessageList = ({ channel, messages, isLoading = false }: MessageLis
         )}
         {messages.map((message) => (
           <article key={message.id} className="message">
-            <div className="message__avatar">{message.author?.[0]?.toUpperCase() ?? '?'}</div>
+            <div className="message__avatar">
+              {message.authorProfilePictureUrl ? (
+                <img
+                  src={message.authorProfilePictureUrl}
+                  alt={`${message.author}'s avatar`}
+                  className="message__avatar-image"
+                  loading="lazy"
+                />
+              ) : (
+                message.author?.[0]?.toUpperCase() ?? '?'
+              )}
+            </div>
             <div>
               <div className="message__meta">
                 <strong>{message.author}</strong>

@@ -347,7 +347,8 @@ function App() {
       await sendMessage(db, selectedChannelId, { 
         text, 
         author: profile.displayName,
-        attachments 
+        attachments,
+        authorProfilePictureUrl: profile.profilePictureUrl ?? null
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to send message.'
