@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase/auth'
 import './App.css'
 import { ChannelSidebar } from './components/ChannelSidebar'
@@ -48,6 +48,48 @@ const persistOrganizationId = (userId: string, organizationId: string | null) =>
   window.localStorage.setItem(key, organizationId)
 }
 
+const channelStorageKey = (userId: string, organizationId: string) =>
+  `slack-clone:channel:${userId}:${organizationId}`
+
+const readStoredChannelId = (userId: string, organizationId: string | null) => {
+  if (typeof window === 'undefined' || !organizationId) {
+    return null
+  }
+  return window.localStorage.getItem(channelStorageKey(userId, organizationId))
+}
+
+const persistChannelId = (
+  userId: string,
+  organizationId: string | null,
+  channelId: string | null
+) => {
+  if (typeof window === 'undefined' || !organizationId) {
+    return
+  }
+  const key = channelStorageKey(userId, organizationId)
+  if (!channelId) {
+    window.localStorage.removeItem(key)
+    return
+  }
+  window.localStorage.setItem(key, channelId)
+}
+
+const clearStoredSelectionsForUser = (userId: string) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+  persistOrganizationId(userId, null)
+  const channelPrefix = `slack-clone:channel:${userId}:`
+  const keysToRemove: string[] = []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index)
+    if (key && key.startsWith(channelPrefix)) {
+      keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach((key) => window.localStorage.removeItem(key))
+}
+
 function App() {
   const [authReady, setAuthReady] = useState(false)
   const [authUser, setAuthUser] = useState<FirebaseUser | null>(null)
@@ -66,6 +108,8 @@ function App() {
   const [showOrganizationForm, setShowOrganizationForm] = useState(false)
   const [showProfileForm, setShowProfileForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const lastUserIdRef = useRef<string | null>(null)
+  const activeUserId = authUser?.uid ?? null
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -114,7 +158,18 @@ function App() {
   }, [authUser])
 
   useEffect(() => {
-    if (!authUser) {
+    if (activeUserId) {
+      lastUserIdRef.current = activeUserId
+      return
+    }
+    if (lastUserIdRef.current) {
+      clearStoredSelectionsForUser(lastUserIdRef.current)
+      lastUserIdRef.current = null
+    }
+  }, [activeUserId])
+
+  useEffect(() => {
+    if (!activeUserId) {
       setOrganizations([])
       setSelectedOrganizationId(null)
       setOrganizationsLoading(false)
@@ -133,23 +188,25 @@ function App() {
       try {
         setOrganizationsLoading(true)
         const db = getDb()
-        const collection = await fetchOrganizationsForUser(db, authUser.uid)
+        const collection = await fetchOrganizationsForUser(db, activeUserId)
         if (cancelled) {
           return
         }
+        const storedOrganizationId = readStoredOrganizationId(activeUserId)
+        const storedOrganizationIsValid =
+          !!storedOrganizationId && collection.some((org) => org.id === storedOrganizationId)
         setOrganizations(collection)
         setOrganizationsLoading(false)
         setSelectedOrganizationId((current) => {
           if (current && collection.some((org) => org.id === current)) {
             return current
           }
-          const stored = readStoredOrganizationId(authUser.uid)
-          if (stored && collection.some((org) => org.id === stored)) {
-            return stored
+          if (storedOrganizationIsValid && storedOrganizationId) {
+            return storedOrganizationId
           }
           return collection[0]?.id ?? null
         })
-        if (collection.length > 1 && !readStoredOrganizationId(authUser.uid)) {
+        if (collection.length > 1 && !storedOrganizationIsValid) {
           setShowOrganizationPicker(true)
         } else {
           setShowOrganizationPicker(false)
@@ -167,14 +224,21 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authUser])
+  }, [activeUserId])
 
   useEffect(() => {
-    if (!authUser) {
+    if (!activeUserId || !selectedOrganizationId) {
       return
     }
-    persistOrganizationId(authUser.uid, selectedOrganizationId)
-  }, [authUser, selectedOrganizationId])
+    persistOrganizationId(activeUserId, selectedOrganizationId)
+  }, [activeUserId, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!activeUserId || !selectedOrganizationId || !selectedChannelId) {
+      return
+    }
+    persistChannelId(activeUserId, selectedOrganizationId, selectedChannelId)
+  }, [activeUserId, selectedOrganizationId, selectedChannelId])
 
   useEffect(() => {
     if (!isFirebaseConfigured || !selectedOrganizationId) {
@@ -196,8 +260,17 @@ function App() {
           if (current && collection.some((channel) => channel.id === current)) {
             return current
           }
+          if (activeUserId) {
+            const storedChannelId = readStoredChannelId(activeUserId, selectedOrganizationId)
+            if (storedChannelId && collection.some((channel) => channel.id === storedChannelId)) {
+              return storedChannelId
+            }
+          }
           return collection[0]?.id ?? null
         })
+        if (activeUserId && collection.length === 0) {
+          persistChannelId(activeUserId, selectedOrganizationId, null)
+        }
       },
       (listenerError) => {
         setChannels([])
@@ -209,7 +282,7 @@ function App() {
     )
 
     return () => unsubscribe()
-  }, [selectedOrganizationId])
+  }, [selectedOrganizationId, activeUserId])
 
   useEffect(() => {
     if (!isFirebaseConfigured || !selectedChannelId) {
@@ -287,6 +360,9 @@ function App() {
     try {
       const auth = getAuthInstance()
       await signOut(auth)
+      if (activeUserId) {
+        clearStoredSelectionsForUser(activeUserId)
+      }
       setSelectedOrganizationId(null)
       setOrganizations([])
       setChannels([])
