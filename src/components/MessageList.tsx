@@ -1,4 +1,5 @@
 import type { Message, Channel } from '../lib/chatService'
+import { sanitizeMessageHtml } from '../lib/sanitizeMessageHtml'
 import { AttachmentDisplay } from './AttachmentDisplay'
 
 type MessageListProps = {
@@ -48,7 +49,12 @@ export const MessageList = ({ channel, messages, isLoading = false }: MessageLis
                 <strong>{message.author}</strong>
                 <span>{formatTime(message.createdAt)}</span>
               </div>
-              {message.text && <p>{message.text}</p>}
+              {message.text && (
+                <div
+                  className="message__body"
+                  dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(message.text) }}
+                />
+              )}
               {message.attachments && message.attachments.length > 0 && (
                 <div className="message__attachments">
                   {message.attachments.map((attachment) => (

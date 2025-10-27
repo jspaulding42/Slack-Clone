@@ -374,24 +374,128 @@ main {
   font-size: 0.9rem;
 }
 
-.message p {
+.message__body {
   margin: 0.15rem 0 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message__body p {
+  margin: 0.15rem 0;
+}
+
+.message__body ul,
+.message__body ol {
+  margin: 0.35rem 0;
+  padding-left: 1.25rem;
+}
+
+.message__body li {
+  margin: 0.15rem 0;
+}
+
+.message__body code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+}
+
+.message__body blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid rgba(255, 255, 255, 0.2);
+  color: #9eaac7;
 }
 
 .message-input {
   margin-top: 1rem;
   display: flex;
+  flex-direction: column;
   gap: 0.75rem;
-  align-items: center;
 }
 
-.message-input input {
-  flex: 1;
-  border-radius: 14px;
+.message-input__composer {
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(5, 7, 12, 0.6);
+  background: rgba(5, 7, 12, 0.65);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.message-input__composer.is-disabled {
+  opacity: 0.7;
+}
+
+.message-input__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.message-input__toolbar-btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
   color: inherit;
-  padding: 0.85rem 1.2rem;
+  border-radius: 10px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-transform: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.message-input__toolbar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.message-input__toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.message-input__editor-wrapper {
+  border-radius: 14px;
+  background: rgba(5, 7, 12, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.25rem;
+}
+
+.message-input__editor {
+  min-height: 96px;
+  padding: 0.75rem 1rem;
+  outline: none;
+  line-height: 1.5;
+  cursor: text;
+  position: relative;
+  overflow-y: auto;
+  max-height: 220px;
+  color: inherit;
+}
+
+.message-input__editor--empty::before {
+  content: attr(data-placeholder);
+  color: #7d8aac;
+  position: absolute;
+  left: 1rem;
+  top: 0.75rem;
+  pointer-events: none;
+}
+
+.message-input__composer.is-disabled .message-input__editor {
+  pointer-events: none;
+}
+
+.message-input__editor:focus {
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px rgba(116, 192, 252, 0.4);
 }
 
 .ghost-btn,
@@ -526,6 +630,7 @@ input {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .message-input__attach-btn {
