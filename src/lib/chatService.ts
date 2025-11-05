@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -217,4 +218,32 @@ export const sendMessage = async (
   }
 
   await addDoc(channelMessagesCollection(db, channelId), payload)
+}
+
+export const listenForNewMessages = (
+  db: Firestore,
+  channelId: string,
+  onMessage: (message: Message) => void
+): Unsubscribe => {
+  const messagesQuery = query(
+    channelMessagesCollection(db, channelId),
+    orderBy('createdAt', 'desc'),
+    limit(20)
+  )
+
+  let initialLoad = true
+  return onSnapshot(messagesQuery, (snapshot) => {
+    const changes = snapshot.docChanges()
+    if (initialLoad) {
+      initialLoad = false
+      return
+    }
+
+    changes.forEach((change) => {
+      if (change.type !== 'added' || change.doc.metadata.hasPendingWrites) {
+        return
+      }
+      onMessage(mapMessage(change.doc))
+    })
+  })
 }

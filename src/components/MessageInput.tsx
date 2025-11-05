@@ -1,14 +1,32 @@
-import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useRef, useState } from 'react'
+import {
+  type ClipboardEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react'
 import { FileUpload } from './FileUpload'
 import { AttachmentDisplay } from './AttachmentDisplay'
 import { storageService } from '../lib/storageService'
 import type { MessageAttachment } from '../lib/chatService'
 import { plainTextFromHtml, sanitizeMessageHtml } from '../lib/sanitizeMessageHtml'
 
+type MentionCandidate = {
+  id: string
+  displayName: string
+  username: string
+  aliases?: string[]
+  profilePictureUrl?: string
+}
+
 type MessageInputProps = {
   onSend: (text: string, attachments?: MessageAttachment[]) => Promise<void> | void
   disabled?: boolean
   channelName?: string
+  mentionableUsers?: MentionCandidate[]
 }
 
 const escapeHtml = (value: string) =>
@@ -19,13 +37,94 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-export const MessageInput = ({ onSend, disabled = false, channelName }: MessageInputProps) => {
+export const MessageInput = ({
+  onSend,
+  disabled = false,
+  channelName,
+  mentionableUsers = []
+}: MessageInputProps) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const [editorHtml, setEditorHtml] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<MessageAttachment[]>([])
   const [showFileUpload, setShowFileUpload] = useState(false)
+  const clearMentionState = useCallback(() => {
+    mentionRangeRef.current = null
+    setMentionQuery(null)
+    setMentionMatches([])
+  }, [])
+
+  const evaluateMentionTrigger = () => {
+    if (!editorRef.current || typeof window === 'undefined' || insertingMentionRef.current) {
+      return
+    }
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+      clearMentionState()
+      return
+    }
+    const range = selection.getRangeAt(0)
+    if (!range.collapsed || !editorRef.current.contains(range.startContainer)) {
+      clearMentionState()
+      return
+    }
+
+    let container: Node = range.startContainer
+    let offset = range.startOffset
+
+    if (container.nodeType !== Node.TEXT_NODE) {
+      if (container.childNodes.length > 0 && offset > 0) {
+        const candidate = container.childNodes[offset - 1]
+        if (candidate && candidate.nodeType === Node.TEXT_NODE) {
+          container = candidate
+          offset = candidate.textContent?.length ?? 0
+        } else {
+          clearMentionState()
+          return
+        }
+      } else {
+        clearMentionState()
+        return
+      }
+    }
+
+    const textNode = container as Text
+    const textBeforeCaret = textNode.textContent?.slice(0, offset) ?? ''
+    const atIndex = textBeforeCaret.lastIndexOf('@')
+    if (atIndex === -1) {
+      clearMentionState()
+      return
+    }
+
+    const charBefore = atIndex > 0 ? textBeforeCaret[atIndex - 1] : ''
+    if (charBefore && !/\s/.test(charBefore)) {
+      clearMentionState()
+      return
+    }
+
+    const rawQuery = textBeforeCaret.slice(atIndex + 1)
+    if (rawQuery.includes('@')) {
+      clearMentionState()
+      return
+    }
+
+    if (rawQuery.length > 0 && /[^\w.-]/.test(rawQuery)) {
+      clearMentionState()
+      return
+    }
+
+    const normalizedQuery = rawQuery.toLowerCase()
+    const mentionRange = range.cloneRange()
+    mentionRange.setStart(textNode, atIndex)
+    mentionRangeRef.current = mentionRange
+    setMentionQuery(normalizedQuery)
+  }
+
+  const mentionRangeRef = useRef<Range | null>(null)
+  const insertingMentionRef = useRef(false)
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionMatches, setMentionMatches] = useState<MentionCandidate[]>([])
 
   const updateEditorState = () => {
     const html = editorRef.current?.innerHTML ?? ''
@@ -33,6 +132,7 @@ export const MessageInput = ({ onSend, disabled = false, channelName }: MessageI
     if (error) {
       setError(null)
     }
+    evaluateMentionTrigger()
   }
 
   const syncEditorSoon = () => {
@@ -43,11 +143,34 @@ export const MessageInput = ({ onSend, disabled = false, channelName }: MessageI
     }
   }
 
+  const insertMention = (candidate: MentionCandidate) => {
+    if (!editorRef.current || typeof document === 'undefined') {
+      return
+    }
+    const range = mentionRangeRef.current
+    const selection = window.getSelection()
+    if (!range || !selection) {
+      return
+    }
+
+    insertingMentionRef.current = true
+    try {
+      selection.removeAllRanges()
+      selection.addRange(range)
+      document.execCommand('insertText', false, `@${candidate.username} `)
+      clearMentionState()
+    } finally {
+      insertingMentionRef.current = false
+      syncEditorSoon()
+    }
+  }
+
   const resetEditor = () => {
     if (editorRef.current) {
       editorRef.current.innerHTML = ''
     }
     setEditorHtml('')
+    clearMentionState()
   }
 
   const submitMessage = async () => {
@@ -161,6 +284,22 @@ export const MessageInput = ({ onSend, disabled = false, channelName }: MessageI
   }
 
   const handleEditorKeyDown = async (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Tab' && mentionRangeRef.current && mentionMatches.length > 0) {
+      event.preventDefault()
+      insertMention(mentionMatches[0])
+      return
+    }
+
+    if (event.key === 'Escape' && mentionQuery !== null) {
+      event.preventDefault()
+      clearMentionState()
+      return
+    }
+
+    if (event.key === ' ' && mentionQuery !== null) {
+      clearMentionState()
+    }
+
     if (event.key === 'Enter' && event.altKey) {
       event.preventDefault()
       if (!insertListItemBreak()) {
@@ -210,10 +349,6 @@ export const MessageInput = ({ onSend, disabled = false, channelName }: MessageI
     syncEditorSoon()
   }
 
-  const editorIsEmpty = plainTextFromHtml(editorHtml).trim().length === 0
-  const toolbarDisabled = disabled || isSending
-  const placeholder = channelName ? `Message #${channelName}` : 'Choose a channel'
-
   const handleFilesSelected = (newAttachments: MessageAttachment[]) => {
     setAttachments(prev => [...prev, ...newAttachments])
     setShowFileUpload(false)
@@ -236,6 +371,52 @@ export const MessageInput = ({ onSend, disabled = false, channelName }: MessageI
     // Remove from UI state
     setAttachments(prev => prev.filter(att => att.id !== attachmentId))
   }
+
+  const handleMentionMouseDown = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    candidate: MentionCandidate
+  ) => {
+    event.preventDefault()
+    insertMention(candidate)
+  }
+
+  useEffect(() => {
+    if (mentionQuery === null) {
+      setMentionMatches([])
+      return
+    }
+    const queryLower = mentionQuery.toLowerCase()
+    const matchesQuery = (candidate: MentionCandidate) => {
+      if (queryLower.length === 0) {
+        return true
+      }
+      if (candidate.username.toLowerCase().startsWith(queryLower)) {
+        return true
+      }
+      return (candidate.aliases ?? []).some((alias) => alias.toLowerCase().startsWith(queryLower))
+    }
+
+    const candidates = mentionableUsers.filter(matchesQuery).slice(0, 3)
+
+    setMentionMatches((current) => {
+      const unchanged =
+        current.length === candidates.length &&
+        current.every((item, index) => item.id === candidates[index].id)
+      return unchanged ? current : candidates
+    })
+  }, [mentionQuery, mentionableUsers])
+
+  useEffect(() => {
+    if (!disabled && !isSending) {
+      return
+    }
+    clearMentionState()
+  }, [disabled, isSending, clearMentionState])
+
+  const editorIsEmpty = plainTextFromHtml(editorHtml).trim().length === 0
+  const toolbarDisabled = disabled || isSending
+  const placeholder = channelName ? `Message #${channelName}` : 'Choose a channel'
+  const mentionListVisible = !toolbarDisabled && mentionQuery !== null && mentionMatches.length > 0
 
   return (
     <div className="message-input-container">
@@ -343,12 +524,31 @@ export const MessageInput = ({ onSend, disabled = false, channelName }: MessageI
               contentEditable={!toolbarDisabled}
               suppressContentEditableWarning
               onInput={updateEditorState}
+              onBlur={clearMentionState}
               onKeyDown={handleEditorKeyDown}
               onPaste={handlePaste}
               data-placeholder={placeholder}
               role="textbox"
               aria-multiline="true"
             />
+            {mentionListVisible && (
+              <div className="mention-suggestions">
+                {mentionMatches.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    className="mention-suggestions__option"
+                    onMouseDown={(event) => handleMentionMouseDown(event, candidate)}
+                  >
+                    <span className="mention-suggestions__username">@{candidate.username}</span>
+                    {candidate.displayName &&
+                      candidate.displayName.toLowerCase() !== candidate.username.toLowerCase() && (
+                        <span className="mention-suggestions__name">{candidate.displayName}</span>
+                      )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="message-input__controls">

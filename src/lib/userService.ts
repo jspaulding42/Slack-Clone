@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  documentId,
   getDoc,
   getDocs,
   query,
@@ -33,8 +34,10 @@ export type Organization = {
   createdByDisplayName?: string
 }
 
+const usersCollection = (db: Firestore) => collection(db, 'users')
+
 const userDoc = (db: Firestore, userId: string): DocumentReference<DocumentData> =>
-  doc(db, 'users', userId)
+  doc(usersCollection(db), userId)
 const organizationsCollection = (db: Firestore) => collection(db, 'organizations')
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase()
@@ -95,16 +98,56 @@ export const getUserProfile = async (db: Firestore, userId: string): Promise<Use
     return null
   }
 
-  const data = snapshot.data()
-  return {
-    id: snapshot.id,
-    email: data.email ?? '',
-    displayName: data.displayName ?? '',
-    phoneNumber: data.phoneNumber ?? undefined,
-    profilePictureUrl: data.profilePictureUrl ?? undefined,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt
+  return mapUserProfile(snapshot.id, snapshot.data() ?? {})
+}
+
+const mapUserProfile = (id: string, data: DocumentData): UserProfile => ({
+  id,
+  email: data.email ?? '',
+  displayName: data.displayName ?? '',
+  phoneNumber: data.phoneNumber ?? undefined,
+  profilePictureUrl: data.profilePictureUrl ?? undefined,
+  createdAt: data.createdAt,
+  updatedAt: data.updatedAt
+})
+
+const chunkArray = <T>(values: T[], chunkSize: number): T[][] => {
+  const result: T[][] = []
+  for (let index = 0; index < values.length; index += chunkSize) {
+    result.push(values.slice(index, index + chunkSize))
   }
+  return result
+}
+
+export const fetchUserProfilesByIds = async (
+  db: Firestore,
+  userIds: string[]
+): Promise<UserProfile[]> => {
+  if (userIds.length === 0) {
+    return []
+  }
+
+  const uniqueIds = Array.from(new Set(userIds.filter((id) => id && id.trim().length > 0)))
+  if (uniqueIds.length === 0) {
+    return []
+  }
+
+  const batches = chunkArray(uniqueIds, 10)
+  const results: UserProfile[] = []
+
+  for (const batch of batches) {
+    const snapshot = await getDocs(
+      query(usersCollection(db), where(documentId(), 'in', batch))
+    )
+    snapshot.forEach((docSnapshot) => {
+      results.push(mapUserProfile(docSnapshot.id, docSnapshot.data()))
+    })
+  }
+
+  const profilesById = new Map(results.map((profile) => [profile.id, profile]))
+  return uniqueIds
+    .map((id) => profilesById.get(id))
+    .filter((profile): profile is UserProfile => Boolean(profile))
 }
 
 export const fetchOrganizationsForUser = async (

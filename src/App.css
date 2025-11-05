@@ -256,6 +256,26 @@
   text-overflow: ellipsis;
 }
 
+.channel-btn--unread:not(.active) {
+  border-color: rgba(255, 107, 160, 0.6);
+  background: rgba(255, 107, 160, 0.08);
+}
+
+.channel-btn__badge {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.75rem;
+  min-width: 22px;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff6aa2, #ff8a6a);
+  color: #0b0f18;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 6px 18px rgba(255, 118, 162, 0.35);
+}
+
 .organization-picker__list {
   list-style: none;
   padding: 0;
@@ -483,6 +503,9 @@ main {
   background: rgba(5, 7, 12, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0.25rem;
+  position: relative;
+  overflow: visible;
+  z-index: 1;
 }
 
 .message-input__editor {
@@ -504,6 +527,55 @@ main {
   left: 1rem;
   top: 0.75rem;
   pointer-events: none;
+}
+
+.mention-suggestions {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.45rem;
+  border-radius: 12px;
+  background: rgba(10, 14, 24, 0.92);
+  border: 1px solid rgba(116, 192, 252, 0.35);
+  box-shadow: 0 18px 35px rgba(5, 8, 14, 0.45);
+  min-width: 220px;
+  max-width: min(320px, 70vw);
+  z-index: 5;
+}
+
+.mention-suggestions__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.mention-suggestions__option:hover {
+  background: rgba(116, 192, 252, 0.12);
+  border-color: rgba(116, 192, 252, 0.35);
+  transform: translateX(2px);
+}
+
+.mention-suggestions__username {
+  font-weight: 600;
+  color: #dbe8ff;
+}
+
+.mention-suggestions__name {
+  font-size: 0.8rem;
+  color: #8da4cb;
 }
 
 .message-input__composer.is-disabled .message-input__editor {

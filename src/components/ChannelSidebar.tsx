@@ -15,6 +15,7 @@ type ChannelSidebarProps = {
   userEmail?: string | null
   userProfilePictureUrl?: string | null
   isLoading?: boolean
+  mentionCounts?: Record<string, number>
 }
 
 export const ChannelSidebar = ({
@@ -31,7 +32,8 @@ export const ChannelSidebar = ({
   userDisplayName,
   userEmail,
   userProfilePictureUrl,
-  isLoading = false
+  isLoading = false,
+  mentionCounts = {}
 }: ChannelSidebarProps) => (
   <aside className="sidebar">
     <section className="sidebar__section">
@@ -109,18 +111,33 @@ export const ChannelSidebar = ({
       )}
 
       <ul className="sidebar__channel-list">
-        {channels.map((channel) => (
-          <li key={channel.id}>
-            <button
-              className={channel.id === selectedChannelId ? 'channel-btn active' : 'channel-btn'}
-              type="button"
-              onClick={() => onSelectChannel(channel.id)}
-            >
-              <span className="channel-btn__name"># {channel.name}</span>
-              {channel.topic && <small className="channel-btn__topic">{channel.topic}</small>}
-            </button>
-          </li>
-        ))}
+        {channels.map((channel) => {
+          const mentionCount = mentionCounts[channel.id] ?? 0
+          const classes = ['channel-btn']
+          if (channel.id === selectedChannelId) {
+            classes.push('active')
+          }
+          if (mentionCount > 0) {
+            classes.push('channel-btn--unread')
+          }
+          return (
+            <li key={channel.id}>
+              <button
+                className={classes.join(' ')}
+                type="button"
+                onClick={() => onSelectChannel(channel.id)}
+              >
+                <span className="channel-btn__name"># {channel.name}</span>
+                {channel.topic && <small className="channel-btn__topic">{channel.topic}</small>}
+                {mentionCount > 0 && (
+                  <span className="channel-btn__badge">
+                    {mentionCount > 99 ? '99+' : mentionCount}
+                  </span>
+                )}
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </section>
   </aside>
