@@ -14,6 +14,7 @@ import {
   type Message,
   type MessageAttachment,
   createChannel,
+  listenForNewMessages,
   listenToChannels,
   listenToMessages,
   sendMessage
@@ -24,8 +25,11 @@ import {
   type UserProfile,
   createOrganization as createOrganizationRecord,
   ensureUserProfile,
-  fetchOrganizationsForUser
+  fetchOrganizationsForUser,
+  fetchUserProfilesByIds
 } from './lib/userService'
+import { buildUsernameCandidates, extractMentionsFromHtml } from './lib/mentionUtils'
+import type { Unsubscribe } from 'firebase/firestore'
 
 const organizationStorageKey = (userId: string) => `slack-clone:organization:${userId}`
 
@@ -90,6 +94,14 @@ const clearStoredSelectionsForUser = (userId: string) => {
   keysToRemove.forEach((key) => window.localStorage.removeItem(key))
 }
 
+type MentionableUser = {
+  id: string
+  displayName: string
+  username: string
+  aliases: string[]
+  profilePictureUrl?: string
+}
+
 function App() {
   const [authReady, setAuthReady] = useState(false)
   const [authUser, setAuthUser] = useState<FirebaseUser | null>(null)
@@ -102,6 +114,8 @@ function App() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [messagesLoading, setMessagesLoading] = useState(false)
+  const [mentionCounts, setMentionCounts] = useState<Record<string, number>>({})
+  const [mentionableUsers, setMentionableUsers] = useState<MentionableUser[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [showChannelForm, setShowChannelForm] = useState(false)
   const [showOrganizationPicker, setShowOrganizationPicker] = useState(false)
@@ -109,7 +123,30 @@ function App() {
   const [showProfileForm, setShowProfileForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastUserIdRef = useRef<string | null>(null)
+  const mentionListenersRef = useRef<Record<string, Unsubscribe>>({})
+  const selectedChannelIdRef = useRef<string | null>(null)
+  const profileRef = useRef<UserProfile | null>(null)
+  const currentUsernameRef = useRef<string | null>(null)
+  const currentUsernameAliasesRef = useRef<string[]>([])
   const activeUserId = authUser?.uid ?? null
+
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
+
+  useEffect(() => {
+    selectedChannelIdRef.current = selectedChannelId
+    if (!selectedChannelId) {
+      return
+    }
+    setMentionCounts((current) => {
+      if (!current[selectedChannelId]) {
+        return current
+      }
+      const { [selectedChannelId]: _cleared, ...rest } = current
+      return rest
+    })
+  }, [selectedChannelId])
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -315,6 +352,188 @@ function App() {
     [channels, selectedChannelId]
   )
 
+  const currentUsernameCandidates = useMemo(() => {
+    if (!profile) {
+      return []
+    }
+    const fallback = profile.email ? profile.email.split('@')[0] : undefined
+    return buildUsernameCandidates(profile.displayName, fallback)
+  }, [profile])
+
+  const currentUsername = currentUsernameCandidates.length > 0 ? currentUsernameCandidates[0] : null
+
+  const currentUsernameAliases = useMemo(
+    () => (currentUsernameCandidates.length > 1 ? currentUsernameCandidates.slice(1) : []),
+    [currentUsernameCandidates]
+  )
+
+  useEffect(() => {
+    currentUsernameRef.current = currentUsername
+  }, [currentUsername])
+
+  useEffect(() => {
+    currentUsernameAliasesRef.current = currentUsernameAliases
+  }, [currentUsernameAliases])
+
+  const selectedOrganizationMemberKey = useMemo(
+    () => selectedOrganization?.memberIds?.join('|') ?? '',
+    [selectedOrganization]
+  )
+
+  useEffect(() => {
+    if (!isFirebaseConfigured || !selectedOrganization) {
+      setMentionableUsers([])
+      return
+    }
+
+    const memberIds = selectedOrganization.memberIds ?? []
+    if (memberIds.length === 0) {
+      setMentionableUsers([])
+      return
+    }
+
+    let cancelled = false
+
+    const loadMembers = async () => {
+      try {
+        const db = getDb()
+        const profiles = await fetchUserProfilesByIds(db, memberIds)
+        if (cancelled) {
+          return
+        }
+        const mentionables = profiles
+          .map((member) => {
+            const fallback = member.email ? member.email.split('@')[0] : undefined
+            const candidates = buildUsernameCandidates(member.displayName, fallback)
+            if (candidates.length === 0) {
+              return null
+            }
+            const [username, ...aliases] = candidates
+            return {
+              id: member.id,
+              displayName: member.displayName,
+              username,
+              aliases,
+              profilePictureUrl: member.profilePictureUrl
+            } as MentionableUser
+          })
+          .filter((value): value is MentionableUser => Boolean(value))
+          .sort((a, b) => a.username.localeCompare(b.username))
+        setMentionableUsers(mentionables)
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load organization members', err)
+          setMentionableUsers([])
+        }
+      }
+    }
+
+    loadMembers()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isFirebaseConfigured, selectedOrganization, selectedOrganizationMemberKey])
+
+  const mentionSuggestions = useMemo(() => {
+    if (!profile) {
+      return mentionableUsers
+    }
+    return mentionableUsers.filter((user) => user.id !== profile.id)
+  }, [mentionableUsers, profile])
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) {
+      return
+    }
+
+    const listeners = mentionListenersRef.current
+
+    if (!profile || !currentUsername) {
+      Object.values(listeners).forEach((unsubscribe) => unsubscribe())
+      mentionListenersRef.current = {}
+      if (!profile) {
+        setMentionCounts({})
+      }
+      return
+    }
+
+    const db = getDb()
+    const activeChannelIds = new Set(channels.map((channel) => channel.id))
+
+    Object.entries(listeners).forEach(([channelId, unsubscribe]) => {
+      if (!activeChannelIds.has(channelId)) {
+        unsubscribe()
+        delete listeners[channelId]
+      }
+    })
+
+    if (channels.length === 0) {
+      setMentionCounts({})
+      return
+    }
+
+    channels.forEach((channel) => {
+      if (listeners[channel.id]) {
+        return
+      }
+      listeners[channel.id] = listenForNewMessages(db, channel.id, (message) => {
+        const username = currentUsernameRef.current
+        const currentProfile = profileRef.current
+        const activeChannelId = selectedChannelIdRef.current
+        const usernameAliases = currentUsernameAliasesRef.current
+
+        if (!username || !currentProfile) {
+          return
+        }
+
+        const normalizedAuthor = message.author?.trim().toLowerCase() ?? ''
+        if (
+          normalizedAuthor.length > 0 &&
+          normalizedAuthor === currentProfile.displayName.trim().toLowerCase()
+        ) {
+          return
+        }
+
+        const mentionTokens = extractMentionsFromHtml(message.text ?? '')
+        const matchesMention =
+          mentionTokens.includes(username.toLowerCase()) ||
+          usernameAliases.some((alias) => mentionTokens.includes(alias))
+
+        if (!matchesMention) {
+          return
+        }
+
+        if (activeChannelId === channel.id) {
+          return
+        }
+
+        setMentionCounts((current) => ({
+          ...current,
+          [channel.id]: (current[channel.id] ?? 0) + 1
+        }))
+      })
+    })
+  }, [channels, profile, currentUsername, isFirebaseConfigured])
+
+  useEffect(() => {
+    return () => {
+      Object.values(mentionListenersRef.current).forEach((unsubscribe) => unsubscribe())
+      mentionListenersRef.current = {}
+    }
+  }, [])
+
+  useEffect(() => {
+    setMentionCounts({})
+  }, [selectedOrganizationId])
+
+  useEffect(() => {
+    if (currentUsername === null) {
+      return
+    }
+    setMentionCounts({})
+  }, [currentUsername])
+
   const handleCreateChannel = async (values: { name: string; topic?: string }) => {
     if (!profile || !selectedOrganizationId) {
       return
@@ -447,6 +666,7 @@ function App() {
         userDisplayName={userDisplayName}
         userEmail={userEmail}
         userProfilePictureUrl={userProfilePictureUrl}
+        mentionCounts={mentionCounts}
         isLoading={channelsLoading}
       />
       <main>
@@ -464,6 +684,7 @@ function App() {
               onSend={handleSendMessage}
               disabled={!selectedChannel || !profile}
               channelName={selectedChannel?.name}
+              mentionableUsers={mentionSuggestions}
             />
           </>
         ) : (
