@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Message, Channel } from '../lib/chatService'
+import type { Message, Channel, MessageAttachment } from '../lib/chatService'
 import { sanitizeMessageHtml } from '../lib/sanitizeMessageHtml'
 import { AttachmentDisplay } from './AttachmentDisplay'
+import { AttachmentViewer } from './AttachmentViewer'
 
 type MessageListProps = {
   channel?: Channel | null
@@ -36,6 +37,7 @@ export const MessageList = ({
   const [isAtBottom, setIsAtBottom] = useState(true)
   const lastMessageCountRef = useRef(0)
   const lastChannelIdRef = useRef<string | null>(null)
+  const [activeAttachment, setActiveAttachment] = useState<MessageAttachment | null>(null)
 
   const scrollToBottom = useCallback(
     (behavior: ScrollBehavior = 'smooth') => {
@@ -196,6 +198,7 @@ export const MessageList = ({
                     <AttachmentDisplay
                       key={attachment.id}
                       attachment={attachment}
+                      onPreview={(selected) => setActiveAttachment(selected)}
                     />
                   ))}
                 </div>
@@ -213,6 +216,12 @@ export const MessageList = ({
           </button>
         )}
       </div>
+      {activeAttachment && (
+        <AttachmentViewer
+          attachment={activeAttachment}
+          onClose={() => setActiveAttachment(null)}
+        />
+      )}
     </section>
   )
 }

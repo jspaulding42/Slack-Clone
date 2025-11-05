@@ -5,12 +5,14 @@ type AttachmentDisplayProps = {
   attachment: MessageAttachment
   onRemove?: (attachmentId: string) => void
   showRemoveButton?: boolean
+  onPreview?: (attachment: MessageAttachment) => void
 }
 
 export const AttachmentDisplay = ({ 
   attachment, 
   onRemove, 
-  showRemoveButton = false 
+  showRemoveButton = false,
+  onPreview
 }: AttachmentDisplayProps) => {
   const handleRemove = () => {
     if (onRemove) {
@@ -28,6 +30,14 @@ export const AttachmentDisplay = ({
     document.body.removeChild(link)
   }
 
+  const handleOpen = () => {
+    if (onPreview) {
+      onPreview(attachment)
+      return
+    }
+    handleDownload()
+  }
+
   const isImage = attachment.contentType?.startsWith('image/')
   const fileIcon = storageService.getFileTypeIcon(attachment.contentType || '')
   const fileSize = storageService.formatFileSize(attachment.size)
@@ -36,17 +46,31 @@ export const AttachmentDisplay = ({
     <div className="attachment">
       <div className="attachment__content">
         {isImage && attachment.thumbnailUrl ? (
-          <div className="attachment__image">
+          <div 
+            className="attachment__image"
+            role="button"
+            tabIndex={0}
+            onClick={handleOpen}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleOpen()
+              }
+            }}
+          >
             <img 
               src={attachment.thumbnailUrl} 
               alt={attachment.name}
-              onClick={handleDownload}
               className="attachment__thumbnail"
             />
             <div className="attachment__overlay">
               <button 
+                type="button"
                 className="attachment__download-btn"
-                onClick={handleDownload}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleDownload()
+                }}
                 title="Download full image"
               >
                 ⬇️
@@ -54,15 +78,17 @@ export const AttachmentDisplay = ({
             </div>
           </div>
         ) : (
-          <div className="attachment__file">
+          <button 
+            type="button"
+            className="attachment__file"
+            onClick={handleOpen}
+          >
             <div className="attachment__icon">{fileIcon}</div>
             <div className="attachment__info">
-              <div className="attachment__name" onClick={handleDownload}>
-                {attachment.name}
-              </div>
+              <div className="attachment__name">{attachment.name}</div>
               <div className="attachment__size">{fileSize}</div>
             </div>
-          </div>
+          </button>
         )}
       </div>
       
